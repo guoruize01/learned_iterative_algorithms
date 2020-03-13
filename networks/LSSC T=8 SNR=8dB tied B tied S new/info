@@ -1,0 +1,100 @@
+MC = 1000               # MC is the number of transmitted messages (Monte Carlo simulations)
+L = 32                  # L is the number of sections
+bps = 4                 # bits per section
+R = 1.0                 # R is the rate of the code, bits per channel use
+n = int(L*bps/R)        # number of channel uses, i.e., number of rows of A
+SNR_dB = 8              # training and evaluation SNR in dB
+T = 8
+# 'tied', 'untied', 'tied LAMP tied S', 'tied LAMP untied S', , 'tied LAMP untied S loss=nmse',
+alg_version = 'tied LAMP tied S'
+
+# Create the basic problem structure.
+prob = problems.ssc_problem(n=n, L=L, bps=bps, MC=MC, SNR_dB=SNR_dB)
+
+
+# # build a LAMP network to solve the problem and get the intermediate results so we can greedily extend and then refine(fine-tune)
+layers = networks.build_LAMP4SSC(prob,T=T,untied=True, alg_version=alg_version)
+print('Building layers ... done')
+
+
+# plan the learning
+# training_stages = train.setup_LAMP4SSCtraining(layers,prob,trinit=1e-3, refinements=(.5,) )
+training_stages = train.setup_LAMP4SSCtraining(layers,prob,trinit=1e-3,refinements=(.5,.1,.01) )
+print('Plan the learning ... done')
+
+# do the learning (takes a whixle)
+print('Do the learning (takes a while)')
+# sess = train.do_LAMP4SSCtraining(training_stages,prob,'LAMP4SSC.npz',10,100,10)
+sess = train.do_LAMP4SSCtraining(training_stages,prob,'LAMP4SSC.npz',10,10000,500)
+
+
+################################################################################
+################################################################################
+
+
+def build_LAMP4SSC(prob,T,untied, alg_version):
+    L = prob.L
+
+    theta_init = 1.
+    print('theta_init=' + repr(theta_init))
+    theta_ = tf.Variable(theta_init, dtype=tf.float32, name='theta_0')
+
+    layers = []
+    A = prob.A
+    A_ = prob.A_
+    n, N = A.shape
+    B = A.T
+    B_ = tf.Variable(B, dtype=tf.float32, name='B_0')
+    z_ = prob.y_
+
+    if alg_version == 'tied' or alg_version == 'untied':
+        s_ = tf.matmul(B_, z_)
+        # var_list: Defaults to the list of variables collected in the graph under the key GraphKeys.TRAINABLE_VARIABLES
+        layers.append(('LAMP for SSC Linear-B\t', s_, None))
+    elif alg_version == 'tied LAMP tied S':
+        # initalization with randS = tf.random_normal((N, N), stddev=1.0 / math.sqrt(N)) is simply bad
+        S_ = tf.Variable(tf.eye(N), dtype=tf.float32, name='S')
+        s_amp_ = tf.matmul(B_, z_)
+        s_ = tf.matmul(S_, s_amp_)
+        layers.append(('LAMP for SSC Linear-B,Linear-S\t', s_, None))
+
+
+    tau_ = theta_ * tf.sqrt(tf.reduce_sum(z_ ** 2, axis=0) / n)
+    s1_ = prob.sqrtnPl * tf.matmul((s_ - prob.sqrtnPl), tf.linalg.diag(1 / (tau_ ** 2)))
+    s2_ = tf.reshape(tf.transpose(s1_), (-1, prob.B))
+    beta_rs_ = prob.sqrtnPl * tf.nn.softmax(s2_, axis=1)
+    beta_ = tf.transpose(tf.reshape(beta_rs_, [-1, N]))
+
+    layers.append( ('LAMP for SSC non-linear T= 1\t', beta_, (theta_,)) )
+
+    for t in range(1,T):
+        ons_ = tf.matmul( z_, tf.linalg.diag(1 / (tau_ ** 2)))
+        ons_ = tf.matmul( ons_, tf.linalg.diag(prob.P - tf.norm(beta_, axis=0)**2/n))
+        z_ = prob.y_ - tf.matmul(A_, beta_) + ons_
+
+ 		if alg_version == 'tied':
+            s_ = beta_ + tf.matmul(B_, z_)
+        elif alg_version == 'untied':
+            B_ = tf.Variable(B, dtype=tf.float32, name='B_' + str(t))
+            s_ = beta_ + tf.matmul(B_, z_)
+            layers.append(('LAMP for SSC linear-B T={:2d}'.format(t + 1), s_, (B_,)))
+        elif alg_version == 'tied LAMP tied S':
+            s_amp_ = beta_ + tf.matmul(B_, z_)
+            s_ = tf.matmul(S_, s_amp_)
+
+
+        theta_ = tf.Variable(theta_init, name='theta_' + str(t))
+        tau_ = theta_ * tf.sqrt(tf.reduce_sum(z_ ** 2, axis=0) / n)
+
+        s1_ = prob.sqrtnPl * tf.matmul((s_ - prob.sqrtnPl), tf.linalg.diag(1 / (tau_ ** 2)))
+        s2_ = tf.reshape(tf.transpose(s1_), (-1, prob.B))
+        beta_rs_ = prob.sqrtnPl * tf.nn.softmax(s2_, axis=1)
+
+        beta_ = tf.transpose(tf.reshape(beta_rs_, [-1, N]))
+
+        layers.append(('LAMP for SSC non-linear T={:2d}\t'.format(t + 1), beta_, (theta_,)))
+
+        # layers.append(('LAMP for SSC non-linear T={0}'.format(t + 1), beta_, z_, tau_, Bz_, s1_, s2_, beta_rs_, None))
+
+    return layers
+

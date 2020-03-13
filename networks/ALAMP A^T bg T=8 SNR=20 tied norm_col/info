@@ -1,0 +1,49 @@
+L=10000
+M=250
+N=500
+SNR=20
+pnz=.1
+untied=False
+T=8
+shrink='bg'
+
+
+
+## in build_LAMP(prob,T,shrink,untied):
+B = prob.W
+
+
+
+## in bernoulli_gaussian_trial(M=250,N=500,L=1000,pnz=.1,kappa=None,SNR=40):
+
+A = np.random.normal(size=(M, N), scale=1.0 / math.sqrt(M)).astype(np.float32)
+
+# A_pnz = 0.1
+# A_sparse = ((np.random.uniform(0, 1, (M, N)) < A_pnz) * A / math.sqrt(A_pnz)).astype(np.float32)
+# A = A_sparse
+
+# A_0pm1_pnz = 0.1
+# A_0pm1 = ((np.random.uniform(0, 1, (M, N)) < A_0pm1_pnz) * np.sign(A) / math.sqrt(M * A_0pm1_pnz)).astype(np.float32)
+# A = A_0pm1
+
+# U_helper = np.random.normal(size=(N, N), scale=1.0).astype(np.float32)
+# U, S, Vh = np.linalg.svd(U_helper)
+# # print(U.shape)
+# rows = np.random.permutation(np.arange(N))[0:M]
+# A = U[rows, :] * np.sqrt(N/M)
+
+col_normalized = True
+if col_normalized:
+    A = A / np.sqrt(np.sum(np.square(A), axis=0, keepdims=True))
+
+
+restoring theta_0:0 is:[213.56003    -1.0986899]
+restoring theta_1:0 is:[0.6437339 2.1711125]
+restoring theta_2:0 is:[0.21681564 3.296095  ]
+restoring theta_3:0 is:[8.558957  1.5722075]
+restoring theta_4:0 is:[0.67940384 3.0730484 ]
+restoring theta_5:0 is:[0.17731301 6.3620453 ]
+restoring theta_6:0 is:[2.5087547 3.8957267]
+restoring theta_7:0 is:[0.4149951 3.5682204]
+restoring theta_8:0 is:[0.6494356 5.737353 ]
+restoring theta_9:0 is:[0.7122053 3.9420266]

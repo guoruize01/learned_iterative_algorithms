@@ -1,0 +1,30 @@
+# Create the basic problem structure.
+prob = problems.bernoulli_gaussian_trial(kappa=None,M=250,N=500,L=1000,pnz=.1,SNR=20) #a Bernoulli-Gaussian x, noisily observed through a random matrix
+#prob = problems.random_access_problem(2) # 1 or 2 for compressive random access or massive MIMO
+print('A is:')
+print(prob.A)
+
+# build a LAMP network to solve the problem and get the intermediate results so we can greedily extend and then refine(fine-tune)
+layers = networks.build_LAMP(prob,T=8,shrink='bg',untied=False)
+# plan the learning
+training_stages = train.setup_training(layers,prob,trinit=1e-3,refinements=(.5,.1,.01))
+
+# do the learning (takes a while)
+sess = train.do_training(training_stages,prob,'LAMP_bg_giid.npz')
+
+train.evaluate_nmse(sess, training_stages, prob, 'LAMP_bg_giid.npz',SNR=20 )
+
+#############
+
+U_helper = np.random.normal(size=(N, N), scale=1.0).astype(np.float32)
+U, S, Vh = np.linalg.svd(U_helper)
+# print(U.shape)
+rows = np.random.permutation(np.arange(N))[0:M]
+A = U[rows, :] * np.sqrt(N/M)
+
+#############
+
+# B_ =  tf.Variable(B,dtype=tf.float32,name='B_0')
+B_ = tf.constant(B, dtype=tf.float32)
+By_ = tf.matmul( B_ , prob.y_ )
+# layers.append( ('Linear',By_,None) )

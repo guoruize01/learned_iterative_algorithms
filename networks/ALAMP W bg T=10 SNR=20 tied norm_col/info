@@ -1,0 +1,37 @@
+L=10000
+M=250
+N=500
+SNR=20
+pnz=.1
+untied=False
+T=10
+shrink='bg'
+
+
+
+## in build_LAMP(prob,T,shrink,untied):
+B = prob.W
+
+
+
+## in bernoulli_gaussian_trial(M=250,N=500,L=1000,pnz=.1,kappa=None,SNR=40):
+
+A = np.random.normal(size=(M, N), scale=1.0 / math.sqrt(M)).astype(np.float32)
+
+# A_pnz = 0.1
+# A_sparse = ((np.random.uniform(0, 1, (M, N)) < A_pnz) * A / math.sqrt(A_pnz)).astype(np.float32)
+# A = A_sparse
+
+# A_0pm1_pnz = 0.1
+# A_0pm1 = ((np.random.uniform(0, 1, (M, N)) < A_0pm1_pnz) * np.sign(A) / math.sqrt(M * A_0pm1_pnz)).astype(np.float32)
+# A = A_0pm1
+
+# U_helper = np.random.normal(size=(N, N), scale=1.0).astype(np.float32)
+# U, S, Vh = np.linalg.svd(U_helper)
+# # print(U.shape)
+# rows = np.random.permutation(np.arange(N))[0:M]
+# A = U[rows, :] * np.sqrt(N/M)
+
+col_normalized = True
+if col_normalized:
+    A = A / np.sqrt(np.sum(np.square(A), axis=0, keepdims=True))

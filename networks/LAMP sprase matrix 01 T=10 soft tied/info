@@ -1,0 +1,7 @@
+# build a LAMP network to solve the problem and get the intermediate results so we can greedily extend and then refine(fine-tune)
+layers = networks.build_LAMP(prob,T=10,shrink='soft',untied=False)
+# plan the learning
+training_stages = train.setup_training(layers,prob,trinit=1e-3,refinements=(.5,.1,.01))
+
+# do the learning (takes a while)
+sess = train.do_training(training_stages,prob,'LAMP_bg_giid.npz')

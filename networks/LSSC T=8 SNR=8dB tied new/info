@@ -1,0 +1,99 @@
+MC = 1000               # MC is the number of transmitted messages (Monte Carlo simulations)
+L = 32                  # L is the number of sections
+bps = 4                 # bits per section
+R = 1.0                 # R is the rate of the code, bits per channel use
+n = int(L*bps/R)        # number of channel uses, i.e., number of rows of A
+SNR_dB = 8              # training and evaluation SNR in dB
+
+# Create the basic problem structure.
+prob = problems.ssc_problem(n=n, L=L, bps=bps, MC=MC, SNR_dB=SNR_dB)
+
+
+# # build a LAMP network to solve the problem and get the intermediate results so we can greedily extend and then refine(fine-tune)
+layers = networks.build_LAMP4SSC(prob,T=8,untied=False)
+print('Building layers ... done')
+
+
+# plan the learning
+# training_stages = train.setup_LAMP4SSCtraining(layers,prob,trinit=1e-3, refinements=(.5,) )
+training_stages = train.setup_LAMP4SSCtraining(layers,prob,trinit=1e-3,refinements=(.5,.1,.01) )
+print('Plan the learning ... done')
+
+# do the learning (takes a whixle)
+print('Do the learning (takes a while)')
+# sess = train.do_LAMP4SSCtraining(training_stages,prob,'LAMP4SSC.npz',10,10,10)
+sess = train.do_LAMP4SSCtraining(training_stages,prob,'LAMP4SSC.npz',10,10000,500)
+# sess = train.do_LAMP4SSCtraining(training_stages,prob,'LAMP4SSC.npz')
+
+# train.plot_estimate_to_test_message(sess, training_stages, prob, 'LAMP_bg_giid.npz' )
+# train.test_vector_sizes(sess, training_stages, prob, 'LAMP_bg_giid.npz' )
+train.evaluate_LAMP4SSC_nmse(sess, training_stages, prob, 'LAMP4SSC.npz' )
+
+################################################################################
+################################################################################
+
+    L = prob.L
+
+    theta_init = 1.
+    print('theta_init=' + repr(theta_init))
+    theta_ = tf.Variable(theta_init, dtype=tf.float32, name='theta_0')
+
+    layers = []
+    A = prob.A
+    A_ = prob.A_
+    n, N = A.shape
+    B = A.T
+    B_ = tf.Variable(B, dtype=tf.float32, name='B_0')
+    z_ = prob.y_
+
+    s_ = tf.matmul(B_, z_)
+
+    layers.append(('LAMP for SSC Linear-B\t', s_, None))
+
+    tau_ = theta_ * tf.sqrt(tf.reduce_sum(z_ ** 2, axis=0) / n)
+    s1_ = prob.sqrtnPl * tf.matmul((s_ - prob.sqrtnPl), tf.linalg.diag(1 / (tau_ ** 2)))
+    s2_ = tf.reshape(tf.transpose(s1_), (-1, prob.B))
+    beta_rs_ = prob.sqrtnPl * tf.nn.softmax(s2_, axis=1)
+
+    beta_ = tf.transpose(tf.reshape(beta_rs_, [-1, N]))
+
+    layers.append( ('LAMP for SSC non-linear T=1\t', beta_, (theta_,)) )
+
+        for t in range(1,T):
+        ons_ = tf.matmul( z_, tf.linalg.diag(1 / (tau_ ** 2)))
+        ons_ = tf.matmul( ons_, tf.linalg.diag(prob.P - tf.norm(beta_, axis=0)**2/n))
+        z_ = prob.y_ - tf.matmul(A_, beta_) + ons_
+
+                if untied:
+            # B_exp_tail_ = tf.random_normal((N, n), stddev=1.0 / math.sqrt(n))
+            B_exp_tail_ = tf.zeros([N, n], tf.float32)
+            B_exp_helper_ = tf.reshape(tf.stack([B, B_exp_tail_]), [2*N,-1])
+            B_exp_ = tf.Variable(B_exp_helper_, dtype=tf.float32,name='B_exp')
+
+            B_inter = np.random.normal(size=(2*N, 2*N), scale=1.0 / math.sqrt(2*N)).astype(np.float32)
+            B_inter_ = tf.Variable(B_inter, name='B_inter')
+
+            # B_com_tail_ = tf.zeros([N, N], tf.float32)
+            B_com_tail_ = tf.random_normal((N, N), stddev=1.0 / math.sqrt(n))
+            B_com_helper_ = tf.transpose(tf.reshape(tf.stack([tf.eye(N), B_com_tail_]), [2 * N, -1]))
+            B_com_ = tf.Variable(B_com_helper_, dtype=tf.float32, name='B_com')
+
+            s_ = beta_ + tf.matmul(B_com_, tf.nn.relu(tf.matmul(B_inter_, tf.nn.relu(tf.matmul(B_exp_, z_)))))
+
+            layers.append( ('LAMP for SSC non-linear-B-expcom T={:2d}'.format(t+1),s_ ,(B_com_,B_inter_,B_exp_) ) )
+        else:
+            s_ = beta_ + tf.matmul(B_, z_)
+
+
+
+
+        theta_ = tf.Variable(theta_init, name='theta_' + str(t))
+        tau_ = theta_ * tf.sqrt(tf.reduce_sum(z_ ** 2, axis=0) / n)
+
+        s1_ = prob.sqrtnPl * tf.matmul((s_ - prob.sqrtnPl), tf.linalg.diag(1 / (tau_ ** 2)))
+        s2_ = tf.reshape(tf.transpose(s1_), (-1, prob.B))
+        beta_rs_ = prob.sqrtnPl * tf.nn.softmax(s2_, axis=1)
+
+        beta_ = tf.transpose(tf.reshape(beta_rs_, [-1, N]))
+
+        layers.append(('LAMP for SSC non-linear T={0}\t'.format(t + 1), beta_, (theta_,)))
