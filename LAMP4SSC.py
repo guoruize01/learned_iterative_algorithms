@@ -15,7 +15,10 @@ import os
 
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2' # BE QUIET!!!!
 os.environ['KMP_DUPLICATE_LIB_OK']='True'
-import tensorflow as tf
+# import tensorflow as tf
+
+import tensorflow.compat.v1 as tf
+tf.disable_v2_behavior()
 
 
 np.random.seed(1) # numpy is good about making repeatable output
@@ -43,7 +46,7 @@ parameters.SNR_dB = 8               # training and evaluation SNR in dB
 parameters.T = 8                    # number of layers of the network/iterations of the algorithm
 parameters.Onsager = True           # is the Onsager term included in the calculation of the residual
 # type of the loss function in the learning. Possible values 'nmse', 'log loss with probs', 'binary crossentropy'
-parameters.loss = 'binary crossentropy'
+parameters.loss = 'nmse'
 parameters.untied_B = False         # tied or untied B in LAMP
 # 'tied', 'untied', 'tied LAMP tied S', 'tied LAMP untied S', 'tied LAMP tied S no Onsager' ....  'tied LAMP untied S loss=nmse',
 parameters.alg_version = 'tied'

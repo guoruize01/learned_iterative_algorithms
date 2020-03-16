@@ -237,7 +237,7 @@ def ssc_problem(n=50, L=4, bps=4, MC=1000, SNR_dB=None):
 def block_gaussian_trial(m=128, L=32, B=16, MC=1000, pnz=.1, SNR_dB=20):
 
     N = B * L  # N is the length of a the unknown block-sparse x
-    A = np.random.normal(size=(m, N), scale=1.0 / math.sqrt(n)).astype(np.float32)
+    A = np.random.normal(size=(m, N), scale=1.0 / math.sqrt(m)).astype(np.float32)
     A_ = tf.constant(A, name='A')
     prob = TFGenerator(A=A, A_=A_, kappa=None, SNR=SNR_dB)
 
@@ -249,8 +249,11 @@ def block_gaussian_trial(m=128, L=32, B=16, MC=1000, pnz=.1, SNR_dB=20):
     prob.pnz = pnz
 
     # Create tf vectors
-    active_blocks_ = tf.to_float(tf.random_uniform((L, MC)) < pnz)
-    xgen_ = tf.multiply(tf.repeat(active_blocks_, repeats=B, axis=0), tf.random_normal((L * B, MC)))
+    active_blocks_ = tf.to_float(tf.random_uniform((L, 1, MC)) < pnz)
+    ones_ = tf.ones([L, B, MC])
+
+    product_ = tf.multiply(active_blocks_, ones_)
+    xgen_ = tf.reshape(product_, [L * B, MC])
 
     # you should probably change the way noise_var is calculated
     noise_var = pnz * N / m * math.pow(10., -SNR_dB / 10.)
